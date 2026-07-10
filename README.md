@@ -1,5 +1,5 @@
 # Streamlit TODO App
-Copilot アプリでの実装確認
+##Copilot アプリでの実装確認
 PythonのWebフレームワークである **Streamlit** を使用して作成した、シンプルなTODOアプリケーションです。
 HTMLやCSS、JavaScriptを一切使用せず、PythonコードのみでUI構築、状態（セッション）管理、およびデータの永続化を実現しています。
 
