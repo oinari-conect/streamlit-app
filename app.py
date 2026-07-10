@@ -1,10 +1,34 @@
 import streamlit as st
 import json
 import os
+import shutil
+import logging
 from datetime import datetime
 
 # 定数
 TODOS_FILE = "todos.json"
+BACKUP_DIR = ".backups"
+
+# ロギング設定
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def ensure_backup_dir():
+    """バックアップディレクトリを確保"""
+    if not os.path.exists(BACKUP_DIR):
+        os.makedirs(BACKUP_DIR)
+
+def create_backup():
+    """JSON ファイルのバックアップを作成"""
+    if os.path.exists(TODOS_FILE):
+        try:
+            ensure_backup_dir()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file = os.path.join(BACKUP_DIR, f"todos_backup_{timestamp}.json")
+            shutil.copy2(TODOS_FILE, backup_file)
+            logger.info(f"Backup created: {backup_file}")
+        except Exception as e:
+            logger.warning(f"Failed to create backup: {e}")
 
 # JSON ファイルからタスクを読み込む関数
 def load_todos():
@@ -12,14 +36,43 @@ def load_todos():
         try:
             with open(TODOS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            create_backup()
+            return []
+        except (IOError, OSError) as e:
+            logger.error(f"File operation error: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error loading todos: {e}")
             return []
     return []
 
 # タスクを JSON ファイルに保存する関数
 def save_todos(todos):
-    with open(TODOS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(todos, f, ensure_ascii=False, indent=2)
+    try:
+        # 保存前にバックアップを作成
+        create_backup()
+        
+        with open(TODOS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(todos, f, ensure_ascii=False, indent=2)
+        logger.info(f"Todos saved successfully: {len(todos)} tasks")
+    except (IOError, OSError) as e:
+        logger.error(f"File operation error while saving: {e}")
+        st.error(f"ファイル保存エラー: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error saving todos: {e}")
+        st.error(f"予期しないエラーが発生しました: {e}")
+
+def get_last_modified_time():
+    """最終更新時刻を取得"""
+    if os.path.exists(TODOS_FILE):
+        try:
+            timestamp = os.path.getmtime(TODOS_FILE)
+            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            return "不明"
+    return "未保存"
 
 # セッション状態の初期化
 if 'todos' not in st.session_state:
@@ -33,6 +86,10 @@ def get_next_id():
 
 st.title("TODOアプリ")
 
+# 最終更新時刻を表示
+last_modified = get_last_modified_time()
+st.caption(f"📅 最終更新: {last_modified}")
+
 # タスク入力とボタン
 col1, col2 = st.columns([4, 1])
 with col1:
@@ -43,7 +100,9 @@ with col2:
             new_todo = {
                 "id": get_next_id(),
                 "text": task_input,
-                "done": False
+                "done": False,
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
             }
             st.session_state.todos.append(new_todo)
             save_todos(st.session_state.todos)
@@ -82,6 +141,7 @@ if st.session_state.todos:
                 for t in st.session_state.todos:
                     if t["id"] == todo["id"]:
                         t["done"] = new_done_state
+                        t["updated_at"] = datetime.now().isoformat()
                         break
                 save_todos(st.session_state.todos)
                 st.rerun()
